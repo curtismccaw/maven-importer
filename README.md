@@ -1,37 +1,82 @@
-# Maven Product Importer Backend
+## What this app does
 
-Server-side replacement for the browser artifact's chat-handoff push mechanism. This authenticates to Shopify directly with its own credentials, so pushing products becomes an API call instead of a conversation.
+Full pipeline: upload a brand spreadsheet (or PDF for New Works) → map columns → group into products → curate a selection → either push to Shopify as drafts, or export a Shopify bulk-import CSV. Includes zip-based local image matching for the three brands with no usable image feed (&Tradition, Moebe, FRAMA), matched to variants by SKU.
 
 ## IMPORTANT: network access for testing
 
-This was built and smoke-tested in a sandboxed environment that could reach npm registries but **not** `*.myshopify.com` or `api.anthropic.com`. That means:
+This was built and tested in a sandboxed environment that could reach npm registries but **not** `*.myshopify.com` or `api.anthropic.com`. That means:
 
-- The parsing/mapping/grouping logic (`test/smoke.js`) has been run and verified against real Muuto and FRAMA files.
-- The Shopify push path (`src/shopifyClient.js`, `/api/push`) has **not** been exercised against a live store from this environment. It's written directly against the GraphQL shapes that were manually proven working in chat (`productCreate` + `productVariantsBulkCreate`, partial variant sets, image re-hosting confirmation), but needs a real first run against the sandbox store before trusting it with a real batch.
+- The parsing/mapping/grouping logic, the full upload → mapping → preview flow, zip-based image matching, and CSV export have all been run and verified end-to-end through the real HTTP API and a real running server (not just unit-style tests) — see "What's actually been tested" below.
+- The Shopify push path (`src/shopifyClient.js`, `/api/push`) has been exercised against this sandbox and fails with a clean, expected `403 Host not in allowlist` error, confirming the code path runs correctly end-to-end and fails only because of this environment's network restriction, not a bug. It has **not** been proven against a real reachable Shopify store. Run `/api/shopify-check` first on wherever you deploy this, before trusting it with a real batch.
 
-**First thing to do after installing**: run `npm run dev`, then `curl http://localhost:3000/api/shopify-check`. If that returns your shop info, the credential wiring works and everything downstream should follow the same pattern that was already proven manually.
+## What's actually been tested
 
-## Setup
+| Feature | How it was verified |
+|---|---|
+| Upload → mapping → preview (Muuto) | Real HTTP calls against the real file, 447 products / 1,875 variants, matches validated numbers exactly |
+| FRAMA bundle-price summing | Real HTTP calls, 658 priced + 47 flagged incomplete, confirmed SKU 11327 is among the flagged ones |
+| Zip-based image matching | Uploaded a real zip with test images named after real FRAMA SKUs (6274, 2124) alongside the real FRAMA file; confirmed 2/3 matched by SKU (the third, an intentionally unrelated filename, correctly didn't match), confirmed the resulting image URL is genuinely fetchable from the server, and confirmed it appears correctly in a pushed product's payload |
+| CSV export | Exported both the full product list and a filtered subset by index, confirmed valid Shopify bulk-import CSV with correct handles, variant rows, and image URLs |
+| Error handling | Push without a preview, HAY without a category, missing Anthropic key, unknown brand — all return clean errors, nothing crashes |
+| Full app (frontend + backend, one process) | Built the frontend, booted the combined server, confirmed the UI, static assets, and API all serve correctly from one origin |
+| Shopify push | Confirmed it fails with the *expected* network error in this sandbox (`403 Host not in allowlist`) — proves the code path runs correctly, but the actual write to Shopify is unproven until run somewhere with real network access |
+
+## Quick start (local)
 
 ```bash
+# Backend
 npm install
 cp .env.example .env
-# edit .env: fill in SHOPIFY_STORE_DOMAIN, SHOPIFY_ADMIN_API_TOKEN, ANTHROPIC_API_KEY
-npm run dev
+# edit .env: SHOPIFY_STORE_DOMAIN, SHOPIFY_ADMIN_API_TOKEN, ANTHROPIC_API_KEY
+# PUBLIC_BASE_URL only needed if testing zip image upload — see below
+
+# Frontend
+cd frontend
+npm install
+npm run build      # outputs frontend/dist
+cd ..
+
+# Run everything from one process
+npm start
+# -> open http://localhost:3000
 ```
+
+`npm run dev` (backend) plus `cd frontend && npm run dev` (in a second terminal) runs them separately during active frontend development — Vite serves the UI on :5173 and proxies `/api` calls to the backend on :3000 (see `frontend/vite.config.js`). For anything past active UI development, build once and run the single combined process above, it's simpler to deploy.
 
 ### Getting a Shopify Admin API token
 
-1. In the sandbox store admin: Settings > Apps and sales channels > Develop apps.
+1. In the target store admin: Settings > Apps and sales channels > Develop apps.
 2. Create an app, grant it `write_products` and `write_inventory` scopes.
 3. Install the app, copy the Admin API access token into `.env`.
-4. When ready to point at the live store, swap `SHOPIFY_STORE_DOMAIN` and the token — nothing else in the code needs to change, this was a deliberate design goal.
+4. To move from sandbox to the live store, swap `SHOPIFY_STORE_DOMAIN` and the token — nothing else needs to change.
+
+### Zip-based image matching (&Tradition, Moebe, FRAMA)
+
+These three brands have no usable image feed in their source spreadsheets (see `brand-mapping-notes.md`), so Step 1 in the UI shows a second file input for a zip of images when one of those brands is selected. Name each image file after its SKU (e.g. `2124.jpg`); matching is case-insensitive and ignores the extension. Files that don't match any SKU are silently skipped, not treated as an error.
+
+**This requires `PUBLIC_BASE_URL`** in `.env` to be set to this app's real, publicly reachable address (e.g. `https://maven-importer.onrender.com`) — Shopify's servers need to fetch the image from a real URL, so `localhost` will not work once you're actually pushing to Shopify. The preview step will refuse to run with a clear error if a zip was uploaded but `PUBLIC_BASE_URL` isn't set. Images are extracted to `data/images/<uploadId>/` and served by this same app at `/local-images/<uploadId>/<filename>`.
+
+### CSV export
+
+Step 4 has a "Download CSV" button that exports a Shopify bulk-import CSV (`GET /api/export/:uploadId?indexes=0,1,2`) for the currently curated selection — the same product data used for the live push, so it's a genuine alternative path, e.g. a manual review pass, or for brands you're not ready to push live yet.
+
+## Deploying somewhere real
+
+This is a normal long-running Node/Express process (not serverless functions), so it fits hosts like **Render, Railway, or Fly.io** with no code changes:
+
+1. Push this to a Git repo.
+2. On the host: set the build command to `npm install && cd frontend && npm install && npm run build && cd ..`, and the start command to `npm start`.
+3. Set the environment variables (`SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN`, `SHOPIFY_API_VERSION`, `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL`, `PORT`) in the host's dashboard, not in a committed `.env`. **`PUBLIC_BASE_URL` should be set to the URL the host gives you** (e.g. `https://your-app-name.onrender.com`) if you'll use zip-based image uploads.
+4. Deploy, then visit the given URL and run through Step 1–4 in the UI, or hit `/api/shopify-check` directly first to confirm credentials work before touching any brand files.
+
+**Vercel/Netlify specifically**: this will run there, but it's a poor fit as built. Both platforms run code as short-lived serverless functions with a read-only filesystem outside `/tmp`, and this backend's storage (`src/storage/store.js`) and zip-extracted images (`data/images/`) both write to disk, and the push route deliberately runs slowly (rate-limited product-by-product with image-confirmation polling), which risks hitting serverless execution time limits on a real batch. Render/Railway/Fly.io run this as a normal always-on process, matching how it's built, with zero changes needed.
 
 ## Running the smoke test
 
 ```bash
 node test/smoke.js
 ```
+
 
 This runs the parsing → mapping → grouping pipeline against real Muuto and FRAMA files already in `data/`, with no Shopify calls, and checks it against numbers already validated manually (447 Muuto products, 350 multi-variant; FRAMA's bundle-summing behaviour). Add more brand files to `data/` and extend this test as more brands get ported over.
 

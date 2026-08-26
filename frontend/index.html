@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maven Product Importer</title>
+    <!--
+      Tailwind's CDN build is used here deliberately: this is an internal
+      single-user tool, not a public product, so skipping the PostCSS/Tailwind
+      build pipeline keeps the whole frontend to a handful of files. If this
+      ever needs a real production build pipeline (smaller bundle, no CDN
+      dependency), swap this for a compiled Tailwind setup — the utility
+      classes used throughout App.jsx won't need to change.
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

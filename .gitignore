@@ -1,5 +1,6 @@
-node_modules/
+frontend/node_modules/
+frontend/dist/
+data/*.json
+data/images/
 .env
-data/uploads.json
-data/previews.json
-data/pushResults.json
+node_modules/

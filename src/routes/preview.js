@@ -2,6 +2,7 @@ import { Router } from "express";
 import { applyMapping } from "../parsers/spreadsheet.js";
 import { groupProducts } from "../grouping/index.js";
 import { suggestMapping } from "../aiMapping.js";
+import { applyZipImageMatches } from "../parsers/zip.js";
 import { get, set } from "../storage/store.js";
 
 const router = Router();
@@ -26,8 +27,20 @@ router.post("/preview", (req, res) => {
       mapping: useMapping,
     });
 
-    // Persist the built product list against this uploadId so /push can
-    // reference it by index without re-sending the whole payload.
+    // Fill in any still-blank image_url from the zip upload (if one was
+    // provided for this uploadId), matched by SKU — see src/parsers/zip.js.
+    // Requires PUBLIC_BASE_URL to be set to this app's real, reachable URL;
+    // it can't be localhost, since Shopify has to be able to fetch it.
+    const zipImageMap = get("zipImages", uploadId);
+    if (zipImageMap && !process.env.PUBLIC_BASE_URL) {
+      return res.status(400).json({
+        error: "A zip of images was uploaded for this brand, but PUBLIC_BASE_URL is not set in .env. Set it to this app's public URL (e.g. https://your-app.onrender.com) so Shopify can fetch the images — see README.",
+      });
+    }
+    applyZipImageMatches(products, zipImageMap, process.env.PUBLIC_BASE_URL, uploadId);
+
+    // Persist the built product list against this uploadId so /push and
+    // /export can reference it by index without re-sending the whole payload.
     set("previews", uploadId, { brand: upload.brand, products });
 
     res.json({
@@ -36,6 +49,7 @@ router.post("/preview", (req, res) => {
       productCount: products.length,
       variantCount: products.reduce((a, p) => a + p.variants.length, 0),
       flaggedIncomplete: products._flaggedIncomplete || [],
+      zipImagesMatched: products._zipImagesMatched || 0,
       products: products.map((p, idx) => ({
         idx,
         title: p.title,
