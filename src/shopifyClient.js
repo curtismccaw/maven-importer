@@ -2,26 +2,15 @@
 //
 // This is the piece that structurally can't exist inside the browser artifact:
 // it authenticates with a token that lives only in this process's environment
-// and is never sent to a browser. See README.md for how to obtain credentials.
-//
-// Custom apps created since Shopify's Jan 2026 change no longer hand out a
-// static shpat_ admin token — instead they give a client ID + client secret,
-// exchanged at runtime for a short-lived (24h) access token via the
-// "client credentials grant" flow. That token is cached here and refreshed
-// on expiry. If SHOPIFY_ADMIN_API_TOKEN is set (older custom apps still using
-// a static token), it's used directly and no exchange happens.
+// and is never sent to a browser. See README.md for how to obtain the token.
+
+const REQUIRED_ENV = ["SHOPIFY_STORE_DOMAIN", "SHOPIFY_ADMIN_API_TOKEN"];
 
 function assertConfigured() {
-  if (!process.env.SHOPIFY_STORE_DOMAIN) {
+  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+  if (missing.length) {
     throw new Error(
-      "Shopify client is not configured. Missing env var: SHOPIFY_STORE_DOMAIN. Copy .env.example to .env and fill it in."
-    );
-  }
-  const hasStaticToken = !!process.env.SHOPIFY_ADMIN_API_TOKEN;
-  const hasClientCredentials = !!process.env.SHOPIFY_API_KEY && !!process.env.SHOPIFY_API_SECRET;
-  if (!hasStaticToken && !hasClientCredentials) {
-    throw new Error(
-      "Shopify client is not configured. Set either SHOPIFY_ADMIN_API_TOKEN, or both SHOPIFY_API_KEY and SHOPIFY_API_SECRET, in .env."
+      `Shopify client is not configured. Missing env vars: ${missing.join(", ")}. Copy .env.example to .env and fill them in.`
     );
   }
 }
@@ -31,51 +20,13 @@ function endpoint() {
   return `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${version}/graphql.json`;
 }
 
-// Cached client-credentials access token, refreshed shortly before it expires.
-let cachedToken = null;
-let cachedTokenExpiresAt = 0;
-
-async function fetchClientCredentialsToken() {
-  const res = await fetch(`https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/oauth/access_token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: process.env.SHOPIFY_API_KEY,
-      client_secret: process.env.SHOPIFY_API_SECRET,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Shopify OAuth token exchange failed (HTTP ${res.status}): ${text.slice(0, 500)}`);
-  }
-
-  const json = await res.json();
-  cachedToken = json.access_token;
-  // Refresh a minute early to avoid racing the real expiry.
-  cachedTokenExpiresAt = Date.now() + (json.expires_in - 60) * 1000;
-  return cachedToken;
-}
-
-async function getAccessToken() {
-  if (process.env.SHOPIFY_ADMIN_API_TOKEN) {
-    return process.env.SHOPIFY_ADMIN_API_TOKEN;
-  }
-  if (cachedToken && Date.now() < cachedTokenExpiresAt) {
-    return cachedToken;
-  }
-  return fetchClientCredentialsToken();
-}
-
 async function shopifyGraphQL(query, variables = {}) {
   assertConfigured();
-  const accessToken = await getAccessToken();
   const res = await fetch(endpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Shopify-Access-Token": accessToken,
+      "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_TOKEN,
     },
     body: JSON.stringify({ query, variables }),
   });
@@ -92,6 +43,13 @@ async function shopifyGraphQL(query, variables = {}) {
   return json.data;
 }
 
+// NOTE: productOptions.values below causes Shopify to auto-generate one
+// variant per value combination AS PART OF THIS MUTATION, at price 0.00
+// with no SKU. That's Shopify's documented behaviour, not a bug on our
+// side, so createProduct() below has to reconcile against whatever gets
+// auto-created rather than assuming a clean slate. selectedOptions is
+// included here specifically so that reconciliation can match auto-created
+// variants back to the real variants we actually want to push.
 const PRODUCT_CREATE_MUTATION = `
   mutation productCreate($product: ProductCreateInput!, $media: [CreateMediaInput!]) {
     productCreate(product: $product, media: $media) {
@@ -100,7 +58,7 @@ const PRODUCT_CREATE_MUTATION = `
         title
         status
         variants(first: 100) {
-          nodes { id title sku price }
+          nodes { id title sku price selectedOptions { name value } }
         }
       }
       userErrors { field message }
@@ -111,15 +69,24 @@ const PRODUCT_CREATE_MUTATION = `
 // Variants can't be set directly on productCreate along with options in the
 // same call in all API versions; the reliable two-step path is:
 //   1. productCreate with title/vendor/type/status/tags/descriptionHtml + options
-//   2. productVariantsBulkCreate to add the priced/SKU'd variants
-// This mirrors what was proven manually against the sandbox in chat.
-//
-// SKU lives under inventoryItem, not as a top-level field, on
-// ProductVariantsBulkInput (it only exists top-level on the ProductVariant
-// read type, not this mutation's input).
+//   2. reconcile: productVariantsBulkUpdate for variants Shopify already
+//      auto-created from productOptions.values, productVariantsBulkCreate
+//      only for combinations that don't already exist
+// This mirrors what was proven manually against the sandbox in chat, with
+// the reconciliation step added after diagnosing the "variant already
+// exists" collision (Airy Coffee Table batch, 2026-08-26).
 const PRODUCT_VARIANTS_BULK_CREATE_MUTATION = `
   mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkCreate(productId: $productId, variants: $variants) {
+      productVariants { id title sku price }
+      userErrors { field message }
+    }
+  }
+`;
+
+const PRODUCT_VARIANTS_BULK_UPDATE_MUTATION = `
+  mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkUpdate(productId: $productId, variants: $variants) {
       productVariants { id title sku price }
       userErrors { field message }
     }
@@ -174,28 +141,71 @@ export async function createProduct({ product, variants, images }) {
   }
   const created = createData.productCreate.product;
 
-  // Shopify auto-creates one default variant on productCreate; remove/replace
-  // path varies by API version. Simplest reliable approach: bulk-create the
-  // real variants, matching what worked in manual sandbox testing.
-  const variantData = await shopifyGraphQL(PRODUCT_VARIANTS_BULK_CREATE_MUTATION, {
-    productId: created.id,
-    variants: variants.map((v) => ({
+  // --- Reconciliation ---
+  // Shopify has already auto-created one variant per value we listed in
+  // productOptions above, each at price 0.00 with no SKU. Build a lookup
+  // keyed on selectedOptions so we can tell which of our real variants
+  // collide with an auto-created one (needs productVariantsBulkUpdate to
+  // set the real price/SKU) versus which are genuinely new (needs
+  // productVariantsBulkCreate).
+  const keyOf = (optionValues) =>
+    (optionValues || []).map((ov) => ov.name).join(" / ");
+
+  const existingByKey = new Map(
+    created.variants.nodes.map((v) => [
+      (v.selectedOptions || []).map((o) => o.value).join(" / "),
+      v,
+    ])
+  );
+
+  const toCreate = [];
+  const toUpdate = [];
+
+  for (const v of variants) {
+    const key = keyOf(v.optionValues);
+    const match = existingByKey.get(key);
+    const payload = {
       price: v.price,
       inventoryItem: v.sku ? { sku: v.sku, tracked: true } : undefined,
-      optionValues: v.optionValues,
-    })),
-  });
+    };
+    if (match) {
+      toUpdate.push({ id: match.id, ...payload });
+    } else {
+      toCreate.push({ ...payload, optionValues: v.optionValues });
+    }
+  }
 
-  const variantErrors = variantData.productVariantsBulkCreate.userErrors;
-  if (variantErrors && variantErrors.length) {
-    throw new Error(`productVariantsBulkCreate failed: ${JSON.stringify(variantErrors)}`);
+  const resultVariants = [];
+
+  if (toCreate.length) {
+    const createRes = await shopifyGraphQL(PRODUCT_VARIANTS_BULK_CREATE_MUTATION, {
+      productId: created.id,
+      variants: toCreate,
+    });
+    const variantErrors = createRes.productVariantsBulkCreate.userErrors;
+    if (variantErrors && variantErrors.length) {
+      throw new Error(`productVariantsBulkCreate failed: ${JSON.stringify(variantErrors)}`);
+    }
+    resultVariants.push(...createRes.productVariantsBulkCreate.productVariants);
+  }
+
+  if (toUpdate.length) {
+    const updateRes = await shopifyGraphQL(PRODUCT_VARIANTS_BULK_UPDATE_MUTATION, {
+      productId: created.id,
+      variants: toUpdate,
+    });
+    const variantErrors = updateRes.productVariantsBulkUpdate.userErrors;
+    if (variantErrors && variantErrors.length) {
+      throw new Error(`productVariantsBulkUpdate failed: ${JSON.stringify(variantErrors)}`);
+    }
+    resultVariants.push(...updateRes.productVariantsBulkUpdate.productVariants);
   }
 
   return {
     id: created.id,
     title: created.title,
     status: created.status,
-    variants: variantData.productVariantsBulkCreate.productVariants,
+    variants: resultVariants,
   };
 }
 
