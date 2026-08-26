@@ -2,6 +2,7 @@ import { groupSimple } from "./simple.js";
 import { groupFramaWithBundles } from "./frama.js";
 import { groupATradition } from "./atradition.js";
 import { groupMuuto } from "./muuto.js";
+import { groupNewWorks } from "./newWorks.js";
 import { groupHayLighting, groupHayFurniture } from "./hay.js";
 
 export const BRANDS = ["FRAMA", "&Tradition", "Moebe", "Muuto", "HAY", "New Works"];
@@ -67,15 +68,21 @@ export function groupProducts(brand, mappedRows, { category, rawRows, mapping } 
     case "Muuto":
       products = groupMuuto(mappedRows);
       break;
+    case "New Works": {
+      if (!rawRows || !mapping) {
+        throw new Error("New Works grouping requires { rawRows, mapping } for GBP conversion and market-approval filtering.");
+      }
+      const { products: nwProducts, excludedNotApproved, excludedNoPrice } = groupNewWorks(rawRows, mapping);
+      if (excludedNotApproved.length) nwProducts._excludedNotApproved = excludedNotApproved;
+      if (excludedNoPrice.length) nwProducts._excludedNoPrice = excludedNoPrice;
+      products = nwProducts;
+      break;
+    }
     case "HAY":
       if (category === "Lighting") products = groupHayLighting(mappedRows);
       else if (category === "Furniture") products = groupHayFurniture(mappedRows);
       else throw new Error(`HAY requires a category ("Lighting" or "Furniture") to select the correct grouping strategy.`);
       break;
-    case "New Works":
-      throw new Error(
-        "New Works is PDF-based, not spreadsheet-based. Use parsers/pdf.js and its own grouping, not this module."
-      );
     default:
       throw new Error(`Unknown brand: ${brand}`);
   }
