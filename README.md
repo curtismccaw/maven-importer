@@ -43,12 +43,12 @@ npm start
 
 `npm run dev` (backend) plus `cd frontend && npm run dev` (in a second terminal) runs them separately during active frontend development — Vite serves the UI on :5173 and proxies `/api` calls to the backend on :3000 (see `frontend/vite.config.js`). For anything past active UI development, build once and run the single combined process above, it's simpler to deploy.
 
-### Getting a Shopify Admin API token
+### Getting Shopify Admin API credentials
 
 1. In the target store admin: Settings > Apps and sales channels > Develop apps.
-2. Create an app, grant it `write_products` and `write_inventory` scopes.
-3. Install the app, copy the Admin API access token into `.env`.
-4. To move from sandbox to the live store, swap `SHOPIFY_STORE_DOMAIN` and the token — nothing else needs to change.
+2. Create an app, grant it `write_products` and `write_inventory` scopes, and install it.
+3. On the app's API credentials page, copy the **Client ID** and **Client secret** into `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` in `.env`. Since Shopify's Jan 2026 change, custom apps no longer issue a static admin token — this app exchanges the client ID/secret for a short-lived access token at runtime (`src/shopifyClient.js`), refreshed automatically as it expires. If your app is old enough to still show a static Admin API access token instead, set `SHOPIFY_ADMIN_API_TOKEN` and skip the client ID/secret.
+4. To move from sandbox to the live store, swap `SHOPIFY_STORE_DOMAIN` and the credentials — nothing else needs to change.
 
 ### Zip-based image matching (&Tradition, Moebe, FRAMA)
 
@@ -66,7 +66,7 @@ This is a normal long-running Node/Express process (not serverless functions), s
 
 1. Push this to a Git repo.
 2. On the host: set the build command to `npm install && cd frontend && npm install && npm run build && cd ..`, and the start command to `npm start`.
-3. Set the environment variables (`SHOPIFY_STORE_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN`, `SHOPIFY_API_VERSION`, `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL`, `PORT`) in the host's dashboard, not in a committed `.env`. **`PUBLIC_BASE_URL` should be set to the URL the host gives you** (e.g. `https://your-app-name.onrender.com`) if you'll use zip-based image uploads.
+3. Set the environment variables (`SHOPIFY_STORE_DOMAIN`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET` — or `SHOPIFY_ADMIN_API_TOKEN` for older apps — `SHOPIFY_API_VERSION`, `ANTHROPIC_API_KEY`, `PUBLIC_BASE_URL`, `PORT`) in the host's dashboard, not in a committed `.env`. **`PUBLIC_BASE_URL` should be set to the URL the host gives you** (e.g. `https://your-app-name.onrender.com`) if you'll use zip-based image uploads.
 4. Deploy, then visit the given URL and run through Step 1–4 in the UI, or hit `/api/shopify-check` directly first to confirm credentials work before touching any brand files.
 
 **Vercel/Netlify specifically**: this will run there, but it's a poor fit as built. Both platforms run code as short-lived serverless functions with a read-only filesystem outside `/tmp`, and this backend's storage (`src/storage/store.js`) and zip-extracted images (`data/images/`) both write to disk, and the push route deliberately runs slowly (rate-limited product-by-product with image-confirmation polling), which risks hitting serverless execution time limits on a real batch. Render/Railway/Fly.io run this as a normal always-on process, matching how it's built, with zero changes needed.

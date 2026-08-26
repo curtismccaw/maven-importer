@@ -2,15 +2,26 @@
 //
 // This is the piece that structurally can't exist inside the browser artifact:
 // it authenticates with a token that lives only in this process's environment
-// and is never sent to a browser. See README.md for how to obtain the token.
-
-const REQUIRED_ENV = ["SHOPIFY_STORE_DOMAIN", "SHOPIFY_ADMIN_API_TOKEN"];
+// and is never sent to a browser. See README.md for how to obtain credentials.
+//
+// Custom apps created since Shopify's Jan 2026 change no longer hand out a
+// static shpat_ admin token — instead they give a client ID + client secret,
+// exchanged at runtime for a short-lived (24h) access token via the
+// "client credentials grant" flow. That token is cached here and refreshed
+// on expiry. If SHOPIFY_ADMIN_API_TOKEN is set (older custom apps still using
+// a static token), it's used directly and no exchange happens.
 
 function assertConfigured() {
-  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
-  if (missing.length) {
+  if (!process.env.SHOPIFY_STORE_DOMAIN) {
     throw new Error(
-      `Shopify client is not configured. Missing env vars: ${missing.join(", ")}. Copy .env.example to .env and fill them in.`
+      "Shopify client is not configured. Missing env var: SHOPIFY_STORE_DOMAIN. Copy .env.example to .env and fill it in."
+    );
+  }
+  const hasStaticToken = !!process.env.SHOPIFY_ADMIN_API_TOKEN;
+  const hasClientCredentials = !!process.env.SHOPIFY_API_KEY && !!process.env.SHOPIFY_API_SECRET;
+  if (!hasStaticToken && !hasClientCredentials) {
+    throw new Error(
+      "Shopify client is not configured. Set either SHOPIFY_ADMIN_API_TOKEN, or both SHOPIFY_API_KEY and SHOPIFY_API_SECRET, in .env."
     );
   }
 }
@@ -20,13 +31,51 @@ function endpoint() {
   return `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/${version}/graphql.json`;
 }
 
+// Cached client-credentials access token, refreshed shortly before it expires.
+let cachedToken = null;
+let cachedTokenExpiresAt = 0;
+
+async function fetchClientCredentialsToken() {
+  const res = await fetch(`https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: process.env.SHOPIFY_API_KEY,
+      client_secret: process.env.SHOPIFY_API_SECRET,
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Shopify OAuth token exchange failed (HTTP ${res.status}): ${text.slice(0, 500)}`);
+  }
+
+  const json = await res.json();
+  cachedToken = json.access_token;
+  // Refresh a minute early to avoid racing the real expiry.
+  cachedTokenExpiresAt = Date.now() + (json.expires_in - 60) * 1000;
+  return cachedToken;
+}
+
+async function getAccessToken() {
+  if (process.env.SHOPIFY_ADMIN_API_TOKEN) {
+    return process.env.SHOPIFY_ADMIN_API_TOKEN;
+  }
+  if (cachedToken && Date.now() < cachedTokenExpiresAt) {
+    return cachedToken;
+  }
+  return fetchClientCredentialsToken();
+}
+
 async function shopifyGraphQL(query, variables = {}) {
   assertConfigured();
+  const accessToken = await getAccessToken();
   const res = await fetch(endpoint(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_TOKEN,
+      "X-Shopify-Access-Token": accessToken,
     },
     body: JSON.stringify({ query, variables }),
   });
