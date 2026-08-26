@@ -113,6 +113,10 @@ const PRODUCT_CREATE_MUTATION = `
 //   1. productCreate with title/vendor/type/status/tags/descriptionHtml + options
 //   2. productVariantsBulkCreate to add the priced/SKU'd variants
 // This mirrors what was proven manually against the sandbox in chat.
+//
+// SKU lives under inventoryItem, not as a top-level field, on
+// ProductVariantsBulkInput (it only exists top-level on the ProductVariant
+// read type, not this mutation's input).
 const PRODUCT_VARIANTS_BULK_CREATE_MUTATION = `
   mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkCreate(productId: $productId, variants: $variants) {
@@ -177,7 +181,7 @@ export async function createProduct({ product, variants, images }) {
     productId: created.id,
     variants: variants.map((v) => ({
       price: v.price,
-      sku: v.sku,
+      inventoryItem: v.sku ? { sku: v.sku, tracked: true } : undefined,
       optionValues: v.optionValues,
     })),
   });
