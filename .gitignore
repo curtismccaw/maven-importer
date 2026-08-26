@@ -1,0 +1,5 @@
+node_modules/
+.env
+data/uploads.json
+data/previews.json
+data/pushResults.json
