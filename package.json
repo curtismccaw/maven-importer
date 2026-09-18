@@ -1,23 +1,28 @@
 {
-  "name": "maven-importer-backend",
-  "version": "0.1.0",
-  "description": "Server-side product import pipeline for Maven's six-brand Shopify catalogue import (replaces the browser-artifact chat-handoff mechanism).",
-  "type": "module",
-  "main": "server.js",
+  "name": "maven-product-importer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Brand spreadsheet -> Shopify draft product importer for Maven (wearemaven.co.uk), with AI-assisted column mapping, image-to-variant matching, and AI content enrichment grounded in brand fact sheets.",
+  "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "build": "cd frontend && npm install && npm run build",
-    "test": "node --test test/"
+    "install:frontend": "cd frontend && npm install",
+    "build:frontend": "cd frontend && npm install && npm run build",
+    "dev:server": "node server/index.js",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:frontend",
+    "start": "node server/index.js"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.5.10",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.21.0",
-    "multer": "^2.0.0",
-    "papaparse": "^5.4.1",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
+    "uuid": "^9.0.1",
     "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

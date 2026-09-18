@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r /Users/curtismccaw/Downloads/maven-importer-app/server /Users/curtismccaw/Work/Sites/maven-importer/server-new)",
+      "Bash(cp -r src src-backup)",
+      "Bash(cp -r /Users/curtismccaw/Downloads/maven-importer-app/server .)",
+      "Bash(cp -r /Users/curtismccaw/Downloads/maven-importer-app/frontend/src frontend/)",
+      "Bash(cp /Users/curtismccaw/Downloads/maven-importer-app/frontend/index.html frontend/)",
+      "Bash(cp /Users/curtismccaw/Downloads/maven-importer-app/frontend/package.json frontend/)",
+      "Bash(timeout 5 node server/index.js)"
+    ]
+  }
+}
