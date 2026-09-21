@@ -1,9 +1,17 @@
 import React, { useState } from "react";
 import { uploadSpreadsheet, uploadZip, uploadPdf, listTemplateBrands, getTemplate } from "../api";
 
+// The six brands built and tested so far. Any brand with a saved mapping
+// template also gets merged in below, so onboarding a new brand and saving
+// its template once is enough for it to show up here from then on.
+const KNOWN_BRANDS = ["FRAMA", "&Tradition", "Moebe", "Muuto", "HAY", "New Works"];
+const OTHER_VALUE = "__other__";
+
 export default function UploadStep({ onUploaded, onPdfUploaded }) {
   const [brand, setBrand] = useState("");
-  const [savedBrands, setSavedBrands] = useState([]);
+  const [customBrand, setCustomBrand] = useState("");
+  const [usingCustomBrand, setUsingCustomBrand] = useState(false);
+  const [brandOptions, setBrandOptions] = useState(KNOWN_BRANDS);
   const [fileName, setFileName] = useState("");
   const [zipFileName, setZipFileName] = useState("");
   const [zipCount, setZipCount] = useState(null);
@@ -14,8 +22,25 @@ export default function UploadStep({ onUploaded, onPdfUploaded }) {
   const [busy, setBusy] = useState(false);
 
   React.useEffect(() => {
-    listTemplateBrands().then((d) => setSavedBrands(d.brands)).catch(() => {});
+    listTemplateBrands()
+      .then((d) => {
+        const merged = Array.from(new Set([...KNOWN_BRANDS, ...d.brands])).sort((a, b) => a.localeCompare(b));
+        setBrandOptions(merged);
+      })
+      .catch(() => {});
   }, []);
+
+  const handleBrandSelect = (value) => {
+    if (value === OTHER_VALUE) {
+      setUsingCustomBrand(true);
+      setBrand(customBrand);
+    } else {
+      setUsingCustomBrand(false);
+      setBrand(value);
+    }
+  };
+
+  const effectiveBrand = usingCustomBrand ? customBrand : brand;
 
   const handleSpreadsheet = async (e) => {
     const file = e.target.files[0];
@@ -23,17 +48,17 @@ export default function UploadStep({ onUploaded, onPdfUploaded }) {
     setError("");
     setBusy(true);
     try {
-      const result = await uploadSpreadsheet(file, brand);
+      const result = await uploadSpreadsheet(file, effectiveBrand);
       setFileName(file.name);
       setSessionId(result.sessionId);
       let mapping = null;
-      if (brand) {
+      if (effectiveBrand) {
         try {
-          const tpl = await getTemplate(brand);
+          const tpl = await getTemplate(effectiveBrand);
           if (tpl) mapping = tpl.mapping;
         } catch (e) {}
       }
-      onUploaded({ ...result, brand, savedMapping: mapping });
+      onUploaded({ ...result, brand: effectiveBrand, savedMapping: mapping });
     } catch (err) {
       setError(err.message);
     }
@@ -74,18 +99,24 @@ export default function UploadStep({ onUploaded, onPdfUploaded }) {
   return (
     <div className="card">
       <label className="field-label">Brand</label>
-      <input
-        list="brand-list"
-        value={brand}
-        onChange={(e) => setBrand(e.target.value)}
-        placeholder="e.g. FRAMA, Muuto, HAY"
-        type="text"
-      />
-      <datalist id="brand-list">
-        {savedBrands.map((b) => (
-          <option key={b} value={b} />
+      <select value={usingCustomBrand ? OTHER_VALUE : brand} onChange={(e) => handleBrandSelect(e.target.value)}>
+        <option value="">Select a brand...</option>
+        {brandOptions.map((b) => (
+          <option key={b} value={b}>{b}</option>
         ))}
-      </datalist>
+        <option value={OTHER_VALUE}>Other (custom brand)</option>
+      </select>
+      {usingCustomBrand && (
+        <input
+          value={customBrand}
+          onChange={(e) => {
+            setCustomBrand(e.target.value);
+            setBrand(e.target.value);
+          }}
+          placeholder="Enter custom brand name"
+          type="text"
+        />
+      )}
       <p className="hint">Upload the spreadsheet after setting the brand so a saved mapping template (if any) auto-loads.</p>
 
       <label className="field-label">Spreadsheet (.csv or .xlsx)</label>

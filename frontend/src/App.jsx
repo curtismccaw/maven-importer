@@ -28,7 +28,10 @@ export default function App() {
     setHeaders(result.headers);
     setBrand(result.brand || "");
     if (result.savedMapping) setMapping(result.savedMapping);
-    setStep(2);
+    // Deliberately stay on step 1: the spreadsheet upload only creates the
+    // session, it shouldn't jump the user past the zip/PDF upload fields
+    // that only become usable once sessionId exists. "Continue to mapping"
+    // below is the actual step transition.
   };
 
   const handlePreview = async () => {
@@ -66,7 +69,10 @@ export default function App() {
 
       {step === 1 && sessionId && (
         <div className="actions">
-          <button className="btn btn-primary spacer" onClick={() => setStep(2)}>Continue to mapping</button>
+          <p className="hint spacer" style={{ margin: 0 }}>
+            Spreadsheet loaded. Add photos/fact sheet above if you have them, or continue without.
+          </p>
+          <button className="btn btn-primary" onClick={() => setStep(2)}>Continue to mapping</button>
         </div>
       )}
 
