@@ -4,7 +4,7 @@ const { requireSession } = require("../lib/sessions");
 
 const router = express.Router();
 
-const SHOPIFY_CSV_HEADERS = ["Handle", "Title", "Body (HTML)", "Vendor", "Product Category", "Type", "Tags", "Published", "Option1 Name", "Option1 Value", "Option1 Linked To", "Option2 Name", "Option2 Value", "Option2 Linked To", "Option3 Name", "Option3 Value", "Option3 Linked To", "Variant SKU", "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty", "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", "Variant Compare At Price", "Variant Requires Shipping", "Variant Taxable", "Variant Barcode", "Image Src", "Image Position", "Image Alt Text", "Gift Card", "SEO Title", "SEO Description", "Variant Image", "Status"];
+const SHOPIFY_CSV_HEADERS = ["Handle", "Title", "Body (HTML)", "Vendor", "Product Category", "Type", "Tags", "Published", "Option1 Name", "Option1 Value", "Option1 Linked To", "Option2 Name", "Option2 Value", "Option2 Linked To", "Option3 Name", "Option3 Value", "Option3 Linked To", "Variant SKU", "Variant Grams", "Variant Inventory Tracker", "Variant Inventory Qty", "Variant Inventory Policy", "Variant Fulfillment Service", "Variant Price", "Variant Compare At Price", "Variant Requires Shipping", "Variant Taxable", "Variant Barcode", "Image Src", "Image Position", "Image Alt Text", "Gift Card", "SEO Title", "SEO Description", "Color (product.metafields.shopify.color-pattern)", "Variant Image", "Status"];
 
 function slugify(title) {
   return String(title).toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -76,6 +76,13 @@ router.get("/export/csv/:sessionId", (req, res) => {
           row["Variant Image"] = cellImage;
           const altText = enr && !enr.flagged && enr.alt_texts && enr.alt_texts[i];
           if (altText) row["Image Alt Text"] = altText;
+        }
+        if (i === 0) {
+          // Shopify's standard colour metafield is product-level (it can hold
+          // more than one colour for the product as a whole), so it's set
+          // once on the first row rather than repeated per variant.
+          const uniqueColors = Array.from(new Set(p.variants.map((v) => v.simplified_color).filter(Boolean)));
+          if (uniqueColors.length) row["Color (product.metafields.shopify.color-pattern)"] = uniqueColors.join(", ");
         }
         rows.push(row);
       });

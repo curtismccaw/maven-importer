@@ -1,5 +1,13 @@
 const { findMatchingImages } = require("../imageMatch");
 
+// Escapes regex metacharacters in a string so it can be safely dropped into
+// `new RegExp(...)`. Without this, a colour value containing characters like
+// *, +, (, ), or . (e.g. "Midnight Blue ***", seen in the wild in Muuto's
+// sheet) throws "Invalid regular expression" instead of just matching literally.
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // Muuto bakes the colourway into the PRODUCT column (e.g. "...Black" vs
 // "...Grey"), so grouping on it directly produces near-duplicate one-colour
 // products instead of proper variants. Grouping on FAMILY + TYPE + MODEL
@@ -42,7 +50,7 @@ function buildMuutoProducts(rows, zipImages) {
 
     if (!grouped[groupKey]) {
       grouped[groupKey] = {
-        title: String(row["PRODUCT"] || groupKey).replace(new RegExp(`\\s*${color}\\s*$`, "i"), "").trim() || groupKey,
+        title: String(row["PRODUCT"] || groupKey).replace(new RegExp(`\\s*${escapeRegExp(color)}\\s*$`, "i"), "").trim() || groupKey,
         body_html: String(row["PRODUCT DESCRIPTION"] || ""),
         vendor: "Muuto",
         product_type: String(row["CATEGORY"] || ""),
