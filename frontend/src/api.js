@@ -61,6 +61,10 @@ export async function enrichProduct(sessionId, productIndex) {
   return asJson(await fetch(`/api/enrich/${sessionId}/${productIndex}`, { method: "POST" }));
 }
 
+export async function simplifyColors(sessionId) {
+  return asJson(await fetch(`/api/colors/simplify/${sessionId}`, { method: "POST" }));
+}
+
 export async function pushProduct(sessionId, productIndex) {
   return asJson(await fetch(`/api/push/${sessionId}/${productIndex}`, { method: "POST" }));
 }

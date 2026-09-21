@@ -1,8 +1,11 @@
 import React, { useState } from "react";
-import { enrichProduct } from "../api";
+import { enrichProduct, simplifyColors } from "../api";
 
-export default function PreviewStep({ sessionId, products, hasPdf, enrichment, setEnrichment, onBack, onContinue }) {
+export default function PreviewStep({ sessionId, products, setProducts, hasPdf, enrichment, setEnrichment, onBack, onContinue }) {
   const [enriching, setEnriching] = useState(false);
+  const [simplifying, setSimplifying] = useState(false);
+  const [colorNote, setColorNote] = useState("");
+  const [colorError, setColorError] = useState("");
   const [status, setStatus] = useState({}); // idx -> "pending" | "done" | "failed"
 
   const enrichAll = async () => {
@@ -27,6 +30,26 @@ export default function PreviewStep({ sessionId, products, hasPdf, enrichment, s
     setEnriching(false);
   };
 
+  const runSimplifyColors = async () => {
+    setSimplifying(true);
+    setColorError("");
+    setColorNote("");
+    try {
+      const result = await simplifyColors(sessionId);
+      if (result.total === 0) {
+        setColorNote(result.note || "No colour/finish option found on any variant.");
+      } else {
+        setProducts(result.products);
+        setColorNote(
+          `${result.total} distinct colour values found (${result.cached} already known, ${result.newlyClassified} newly classified), applied to ${result.appliedTo} variants and tagged on each product.`
+        );
+      }
+    } catch (err) {
+      setColorError(err.message);
+    }
+    setSimplifying(false);
+  };
+
   const totalVariants = products.reduce((a, p) => a + p.variants.length, 0);
   const enrichedCount = Object.keys(enrichment).length;
   const flaggedCount = Object.values(enrichment).filter((e) => e.flagged).length;
@@ -37,10 +60,15 @@ export default function PreviewStep({ sessionId, products, hasPdf, enrichment, s
         <p className="note" style={{ margin: 0 }}>
           {products.length} products, {totalVariants} variants total. These will be created as drafts, nothing goes live automatically.
         </p>
-        <button className="btn btn-dark spacer" onClick={enrichAll} disabled={enriching}>
+        <button className="btn btn-dark" onClick={enrichAll} disabled={enriching} style={{ marginLeft: 8 }}>
           {enriching ? "Enriching..." : "Enrich content with AI"}
         </button>
+        <button className="btn btn-dark" onClick={runSimplifyColors} disabled={simplifying} style={{ marginLeft: 8 }}>
+          {simplifying ? "Simplifying colours..." : "Simplify colours with AI"}
+        </button>
       </div>
+      {colorNote && <p className="note info">{colorNote}</p>}
+      {colorError && <p className="error">{colorError}</p>}
       {!hasPdf && (
         <p className="note warn">
           No brand fact sheet uploaded (step 1). Enrichment can still generate SEO/alt text from the existing spreadsheet
@@ -61,6 +89,7 @@ export default function PreviewStep({ sessionId, products, hasPdf, enrichment, s
               <th>Price range</th>
               <th>Images</th>
               <th>Content</th>
+              <th>Colours</th>
               <th>Flags</th>
             </tr>
           </thead>
@@ -87,6 +116,12 @@ export default function PreviewStep({ sessionId, products, hasPdf, enrichment, s
                     {est === "pending" && <span className="amber">enriching...</span>}
                     {est === "done" && <span className="green">ready</span>}
                     {est === "failed" && <span className="red" title={enr && enr.flag_reason}>flagged</span>}
+                  </td>
+                  <td className="muted">
+                    {(() => {
+                      const simplified = Array.from(new Set(p.variants.map((v) => v.simplified_color).filter(Boolean)));
+                      return simplified.length ? simplified.join(", ") : "not simplified";
+                    })()}
                   </td>
                   <td className="muted">{(p.flags || []).join("; ")}</td>
                 </tr>

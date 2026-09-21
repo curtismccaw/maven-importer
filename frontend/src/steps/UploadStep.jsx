@@ -104,17 +104,18 @@ export default function UploadStep({ onUploaded, onPdfUploaded }) {
         {brandOptions.map((b) => (
           <option key={b} value={b}>{b}</option>
         ))}
-        <option value={OTHER_VALUE}>Other (custom brand)</option>
+        <option value={OTHER_VALUE}>Other (new brand)...</option>
       </select>
       {usingCustomBrand && (
         <input
+          type="text"
           value={customBrand}
           onChange={(e) => {
             setCustomBrand(e.target.value);
             setBrand(e.target.value);
           }}
-          placeholder="Enter custom brand name"
-          type="text"
+          placeholder="New brand name"
+          style={{ marginTop: 8 }}
         />
       )}
       <p className="hint">Upload the spreadsheet after setting the brand so a saved mapping template (if any) auto-loads.</p>

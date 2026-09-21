@@ -18,6 +18,19 @@ frontend, served as a single deployable process.
    upload for local zip photos, direct URL for remote CDN links), or download a Shopify
    bulk-import CSV instead. After pushing, a manual-check summary lists anything that
    needs a human look: failed pushes, missing/fuzzy image matches, and enrichment flags.
+5. **Colour simplification**: an AI-assisted "Simplify colours" action in step 3 collapses
+   verbose brand colour/finish names (e.g. "Midnight Blue", "Oak", "Anthracite Black")
+   down to a fixed basic palette (Black, White, Grey, Beige, Brown, Red, Orange, Yellow,
+   Green, Blue, Purple, Pink, Gold, Silver, Multicolor, Clear), for cleaner storefront
+   filtering. Every classification is cached on disk (`server/data/color-map.json`), so
+   the same colour value across any brand or any future import is only ever classified
+   once. Applied as a `Colour: <canonical>` tag per product (works with any theme's
+   filter out of the box) and, on export, written to the standard
+   `Color (product.metafields.shopify.color-pattern)` CSV column at the product level —
+   note that column only imports cleanly if that metafield is defined as plain text on
+   the store; if it's set up as a metaobject-referenced swatch list, treat the CSV value
+   as a manual-check hint rather than an automatic import. The Push (API) flow only sets
+   the tag, not that metafield, to avoid a mismatched-type error breaking the push.
 
 ## Setup
 

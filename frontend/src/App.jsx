@@ -92,6 +92,7 @@ export default function App() {
         <PreviewStep
           sessionId={sessionId}
           products={products}
+          setProducts={setProducts}
           hasPdf={hasPdf}
           enrichment={enrichment}
           setEnrichment={setEnrichment}
