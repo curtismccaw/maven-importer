@@ -183,71 +183,30 @@ async function stageAndUploadImage(buffer, mimeType, filename) {
 
 // product: { title, body_html, vendor, product_type, tags, variants: [...] }
 // Returns { productId, warnings: [] }
+//
+// Rebuilt against Shopify's current (2024-10+) product model:
+// - ProductInput was split into ProductCreateInput/ProductUpdateInput; the old
+//   input: ProductInput! argument no longer accepts an `options` field at all
+//   on recent API versions (this is what broke: "Field is not defined on
+//   ProductInput"). Options are now set via productOptions directly on
+//   productCreate's `product` argument, not a follow-up productUpdate.
+// - productCreate(product: {..., productOptions}) auto-creates ONE standalone
+//   variant using the first value of each option. productVariantsBulkCreate
+//   then needs strategy: REMOVE_STANDALONE_VARIANT to replace it with the
+//   full real variant set, rather than colliding with it.
+// - productVariantsBulkCreate's variant input uses optionValues (referencing
+//   the option by name) instead of the old flat options: [String!] shape.
+// - productCreateMedia is deprecated; media is passed directly as an argument
+//   to productCreate instead, so images and the product are created in one
+//   call rather than two.
+// - A product with no real options at all (single variant, no colour/size)
+//   still gets an implicit default variant from productCreate that must be
+//   UPDATED (not created) with its price/SKU, since it already exists.
 async function createDraftProduct(product) {
   const warnings = [];
 
-  const createResult = await shopifyGraphQL(
-    `mutation productCreate($input: ProductInput!) {
-      productCreate(input: $input) {
-        product { id handle }
-        userErrors { field message }
-      }
-    }`,
-    {
-      input: {
-        title: product.title,
-        descriptionHtml: product.body_html || "",
-        vendor: product.vendor || "",
-        productType: product.product_type || "",
-        tags: (product.tags || "").split(",").map((t) => t.trim()).filter(Boolean),
-        status: "DRAFT",
-      },
-    }
-  );
-  const { userErrors, product: created } = createResult.productCreate;
-  if (userErrors && userErrors.length) {
-    throw new Error(`productCreate error: ${JSON.stringify(userErrors)}`);
-  }
-  const productId = created.id;
-
-  const usesOptions = product.variants.some((v) => v.option1_name) || product.variants.length > 1;
-  const variantInputs = product.variants.map((v) => {
-    const options = [];
-    if (usesOptions) options.push(v.option1_value || "Default Title");
-    if (v.option2_value) options.push(v.option2_value);
-    return {
-      price: String(v.price || "0"),
-      compareAtPrice: v.compare_at_price ? String(v.compare_at_price) : null,
-      options: options.length ? options : ["Default Title"],
-      inventoryItem: { sku: v.sku || undefined, tracked: true },
-    };
-  });
-
-  if (usesOptions) {
-    const optionNames = [product.variants[0].option1_name || "Title"];
-    if (product.variants.some((v) => v.option2_value)) optionNames.push(product.variants[0].option2_name || "Option 2");
-    await shopifyGraphQL(
-      `mutation productUpdate($input: ProductInput!) {
-        productUpdate(input: $input) { product { id } userErrors { field message } }
-      }`,
-      { input: { id: productId, options: optionNames } }
-    );
-  }
-
-  const variantResult = await shopifyGraphQL(
-    `mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkCreate(productId: $productId, variants: $variants) {
-        productVariants { id sku }
-        userErrors { field message }
-      }
-    }`,
-    { productId, variants: variantInputs }
-  );
-  if (variantResult.productVariantsBulkCreate.userErrors && variantResult.productVariantsBulkCreate.userErrors.length) {
-    warnings.push(`Variant creation issues: ${JSON.stringify(variantResult.productVariantsBulkCreate.userErrors)}`);
-  }
-
-  // Attach images: local (zip) photos need staging first, remote URLs go straight in.
+  // Stage local (zip) images first; this is independent of the product
+  // existing yet, staged uploads just need a resource URL Shopify recognises.
   const mediaInputs = [];
   for (const v of product.variants) {
     if (v.local_images && v.local_images.length) {
@@ -263,21 +222,108 @@ async function createDraftProduct(product) {
       mediaInputs.push({ originalSource: v.image_url, mediaContentType: "IMAGE" });
     }
   }
-  if (mediaInputs.length) {
-    const mediaResult = await shopifyGraphQL(
-      `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
-        productCreateMedia(productId: $productId, media: $media) {
-          media { alt mediaContentType }
-          mediaUserErrors { field message }
+  if (!mediaInputs.length) {
+    warnings.push("No images attached: no local match and no image URL for any variant.");
+  }
+
+  const usesOptions = product.variants.some((v) => v.option1_name) || product.variants.length > 1;
+  const opt1Name = usesOptions ? product.variants[0].option1_name || "Title" : null;
+  const opt2Name = usesOptions && product.variants.some((v) => v.option2_value) ? product.variants[0].option2_name || "Option 2" : null;
+
+  const productOptions = [];
+  if (usesOptions) {
+    const opt1Values = Array.from(new Set(product.variants.map((v) => v.option1_value || "Default Title")));
+    productOptions.push({ name: opt1Name, values: opt1Values.map((name) => ({ name })) });
+    if (opt2Name) {
+      const opt2Values = Array.from(new Set(product.variants.filter((v) => v.option2_value).map((v) => v.option2_value)));
+      productOptions.push({ name: opt2Name, values: opt2Values.map((name) => ({ name })) });
+    }
+  }
+
+  const createResult = await shopifyGraphQL(
+    `mutation productCreate($product: ProductCreateInput!, $media: [CreateMediaInput!]) {
+      productCreate(product: $product, media: $media) {
+        product { id handle variants(first: 1) { nodes { id } } }
+        userErrors { field message }
+      }
+    }`,
+    {
+      product: {
+        title: product.title,
+        descriptionHtml: product.body_html || "",
+        vendor: product.vendor || "",
+        productType: product.product_type || "",
+        tags: (product.tags || "").split(",").map((t) => t.trim()).filter(Boolean),
+        status: "DRAFT",
+        ...(productOptions.length ? { productOptions } : {}),
+      },
+      media: mediaInputs.length ? mediaInputs : null,
+    }
+  );
+  const { userErrors, product: created } = createResult.productCreate;
+  if (userErrors && userErrors.length) {
+    throw new Error(`productCreate error: ${JSON.stringify(userErrors)}`);
+  }
+  const productId = created.id;
+
+  if (usesOptions) {
+    // productCreate already made one standalone variant matching the first
+    // value of each option, REMOVE_STANDALONE_VARIANT replaces it with our
+    // full, real set instead of colliding with it.
+    const variantInputs = product.variants.map((v) => {
+      const optionValues = [{ name: v.option1_value || "Default Title", optionName: opt1Name }];
+      if (opt2Name && v.option2_value) optionValues.push({ name: v.option2_value, optionName: opt2Name });
+      return {
+        price: String(v.price || "0"),
+        compareAtPrice: v.compare_at_price ? String(v.compare_at_price) : null,
+        optionValues,
+        inventoryItem: { sku: v.sku || undefined, tracked: true },
+      };
+    });
+
+    const variantResult = await shopifyGraphQL(
+      `mutation productVariantsBulkCreate($productId: ID!, $variants: [ProductVariantsBulkInput!]!, $strategy: ProductVariantsBulkCreateStrategy) {
+        productVariantsBulkCreate(productId: $productId, variants: $variants, strategy: $strategy) {
+          productVariants { id sku }
+          userErrors { field message }
         }
       }`,
-      { productId, media: mediaInputs }
+      { productId, variants: variantInputs, strategy: "REMOVE_STANDALONE_VARIANT" }
     );
-    if (mediaResult.productCreateMedia.mediaUserErrors && mediaResult.productCreateMedia.mediaUserErrors.length) {
-      warnings.push(`Image attach issues: ${JSON.stringify(mediaResult.productCreateMedia.mediaUserErrors)}`);
+    if (variantResult.productVariantsBulkCreate.userErrors && variantResult.productVariantsBulkCreate.userErrors.length) {
+      warnings.push(`Variant creation issues: ${JSON.stringify(variantResult.productVariantsBulkCreate.userErrors)}`);
     }
   } else {
-    warnings.push("No images attached: no local match and no image URL for any variant.");
+    // No real options: productCreate's implicit default variant already
+    // exists, so it needs updating with price/SKU rather than creating anew.
+    const v = product.variants[0];
+    const defaultVariantId = created.variants && created.variants.nodes && created.variants.nodes[0] && created.variants.nodes[0].id;
+    if (defaultVariantId && v) {
+      const updateResult = await shopifyGraphQL(
+        `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            productVariants { id sku }
+            userErrors { field message }
+          }
+        }`,
+        {
+          productId,
+          variants: [
+            {
+              id: defaultVariantId,
+              price: String(v.price || "0"),
+              compareAtPrice: v.compare_at_price ? String(v.compare_at_price) : null,
+              inventoryItem: { sku: v.sku || undefined, tracked: true },
+            },
+          ],
+        }
+      );
+      if (updateResult.productVariantsBulkUpdate.userErrors && updateResult.productVariantsBulkUpdate.userErrors.length) {
+        warnings.push(`Variant update issues: ${JSON.stringify(updateResult.productVariantsBulkUpdate.userErrors)}`);
+      }
+    } else {
+      warnings.push("Could not find the auto-created default variant to set its price/SKU on.");
+    }
   }
 
   return { productId, handle: created.handle, warnings };
