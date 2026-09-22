@@ -20,6 +20,7 @@ export default function App() {
   const [hasPdf, setHasPdf] = useState(false);
   const [mapping, setMapping] = useState(emptyMapping());
   const [products, setProducts] = useState([]);
+  const [selected, setSelected] = useState(new Set());
   const [enrichment, setEnrichment] = useState({});
   const [error, setError] = useState("");
 
@@ -39,6 +40,10 @@ export default function App() {
     try {
       const result = await buildProducts(sessionId, mapping, brand);
       setProducts(result.products);
+      // Default to everything selected, keyed by the product's index in this
+      // array — that index is also what the backend expects when pushing a
+      // single product, so it has to stay stable through filtering/display.
+      setSelected(new Set(result.products.map((_, i) => i)));
       setEnrichment({});
       setStep(3);
     } catch (err) {
@@ -93,6 +98,8 @@ export default function App() {
           sessionId={sessionId}
           products={products}
           setProducts={setProducts}
+          selected={selected}
+          setSelected={setSelected}
           hasPdf={hasPdf}
           enrichment={enrichment}
           setEnrichment={setEnrichment}
@@ -106,6 +113,7 @@ export default function App() {
           sessionId={sessionId}
           brand={brand}
           products={products}
+          selected={selected}
           enrichment={enrichment}
           onBack={() => setStep(3)}
         />

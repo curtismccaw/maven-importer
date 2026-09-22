@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { enrichProduct, simplifyColors } from "../api";
 
-export default function PreviewStep({ sessionId, products, setProducts, hasPdf, enrichment, setEnrichment, onBack, onContinue }) {
+export default function PreviewStep({ sessionId, products, setProducts, selected, setSelected, hasPdf, enrichment, setEnrichment, onBack, onContinue }) {
   const [enriching, setEnriching] = useState(false);
   const [status, setStatus] = useState({}); // idx -> "pending" | "done" | "failed"
   const [simplifying, setSimplifying] = useState(false);
@@ -54,11 +54,27 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
   const enrichedCount = Object.keys(enrichment).length;
   const flaggedCount = Object.values(enrichment).filter((e) => e.flagged).length;
 
+  const allSelected = products.length > 0 && selected.size === products.length;
+  const noneSelected = selected.size === 0;
+
+  const toggleOne = (idx) => {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(products.map((_, i) => i)));
+  };
+
   return (
     <div className="card">
       <div className="actions" style={{ marginTop: 0, marginBottom: 16 }}>
         <p className="note" style={{ margin: 0 }}>
-          {products.length} products, {totalVariants} variants total. These will be created as drafts, nothing goes live automatically.
+          {products.length} products, {totalVariants} variants total. {selected.size} of {products.length} selected for push. These will be created as drafts, nothing goes live automatically.
         </p>
         <button className="btn btn-dark spacer" onClick={enrichAll} disabled={enriching}>
           {enriching ? "Enriching..." : "Enrich content with AI"}
@@ -83,6 +99,9 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
         <table>
           <thead>
             <tr>
+              <th style={{ width: 32 }}>
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Select / deselect all" />
+              </th>
               <th>Title</th>
               <th>Vendor</th>
               <th>Variants</th>
@@ -104,6 +123,9 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
               const enr = enrichment[i];
               return (
                 <tr key={i}>
+                  <td>
+                    <input type="checkbox" checked={selected.has(i)} onChange={() => toggleOne(i)} />
+                  </td>
                   <td>{p.title}</td>
                   <td className="muted">{p.vendor}</td>
                   <td className="muted">{p.variants.length}</td>
@@ -133,7 +155,9 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
 
       <div className="actions">
         <button className="btn" onClick={onBack}>Back</button>
-        <button className="btn btn-primary spacer" onClick={onContinue}>Continue to push</button>
+        <button className="btn btn-primary spacer" onClick={onContinue} disabled={noneSelected} title={noneSelected ? "Select at least one product first" : ""}>
+          Continue to push ({selected.size})
+        </button>
       </div>
     </div>
   );

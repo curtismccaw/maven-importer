@@ -1,10 +1,15 @@
 import React, { useState } from "react";
 import { pushProduct, exportCsvUrl } from "../api";
 
-export default function PushStep({ sessionId, brand, products, enrichment, onBack }) {
+export default function PushStep({ sessionId, brand, products, selected, enrichment, onBack }) {
   const [pushStatus, setPushStatus] = useState({});
   const [pushing, setPushing] = useState(false);
   const [attempted, setAttempted] = useState(false);
+
+  // products keeps its full original indices (the backend session's product
+  // array is unfiltered, and push/enrich calls are keyed by that index), we
+  // just don't render or push anything the user deselected in step 3.
+  const selectedEntries = products.map((p, i) => ({ p, i })).filter(({ i }) => selected.has(i));
 
   const doPush = async (idx) => {
     setAttempted(true);
@@ -20,16 +25,17 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
   const pushAll = async () => {
     setPushing(true);
     setAttempted(true);
+    const indices = selectedEntries.map(({ i }) => i);
     const BATCH = 2;
-    for (let i = 0; i < products.length; i += BATCH) {
-      const batch = products.slice(i, i + BATCH);
-      await Promise.allSettled(batch.map((_, j) => doPush(i + j)));
+    for (let i = 0; i < indices.length; i += BATCH) {
+      const batch = indices.slice(i, i + BATCH);
+      await Promise.allSettled(batch.map((idx) => doPush(idx)));
     }
     setPushing(false);
   };
 
-  const manualCheckItems = products
-    .map((p, i) => {
+  const manualCheckItems = selectedEntries
+    .map(({ p, i }) => {
       const reasons = [];
       const st = pushStatus[i];
       if (st && st.status === "failed") reasons.push(`Push failed: ${st.message || "unknown error"}`);
@@ -47,17 +53,20 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
   return (
     <div className="card">
       <div className="actions" style={{ marginTop: 0, marginBottom: 16 }}>
-        <p className="note" style={{ margin: 0 }}>Pushes 2 at a time to the Shopify Admin API, or push one product on its own with the button on its row. You can retry any that fail.</p>
+        <p className="note" style={{ margin: 0 }}>
+          {selectedEntries.length} of {products.length} products selected (change your selection back in Preview). Pushes
+          2 at a time, or push one product on its own with the button on its row. You can retry any that fail.
+        </p>
         <div style={{ display: "flex", gap: 8 }} className="spacer">
           <a className="btn" href={exportCsvUrl(sessionId)}>Download CSV</a>
-          <button className="btn btn-primary" onClick={pushAll} disabled={pushing}>
-            {pushing ? "Pushing..." : `Push ${products.length} products`}
+          <button className="btn btn-primary" onClick={pushAll} disabled={pushing || selectedEntries.length === 0}>
+            {pushing ? "Pushing..." : `Push ${selectedEntries.length} products`}
           </button>
         </div>
       </div>
 
       <div className="push-list">
-        {products.map((p, i) => {
+        {selectedEntries.map(({ p, i }) => {
           const st = pushStatus[i];
           return (
             <div className="push-row" key={i}>
@@ -80,7 +89,7 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
 
       {attempted && !pushing && (
         <div className="check-summary">
-          <h3>Needs manual check: {manualCheckItems.length} of {products.length} products</h3>
+          <h3>Needs manual check: {manualCheckItems.length} of {selectedEntries.length} products</h3>
           {manualCheckItems.length === 0 ? (
             <p style={{ fontSize: 13, color: "#92400e" }}>
               Nothing flagged, every product pushed cleanly with a confident image match and no content flags.
