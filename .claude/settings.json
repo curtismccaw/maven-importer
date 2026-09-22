@@ -22,7 +22,9 @@
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 7/server/index.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/)",
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 7/server/lib/shopify.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 7/server/routes/push.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/routes/)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }
