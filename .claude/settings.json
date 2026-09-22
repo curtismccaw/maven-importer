@@ -26,7 +26,15 @@
       "Bash(git push *)",
       "Bash(git ls-tree *)",
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 8/server/lib/shopify.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
-      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 8/server/lib/brands/index.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/brands/)"
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 8/server/lib/brands/index.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/brands/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 9/server/routes/enrich.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/routes/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 9/server/lib/brands/index.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/brands/)",
+      "Bash(timeout 3 node server/index.js)",
+      "Bash(git commit *)",
+      "Bash(\ncp \"/Users/curtismccaw/Downloads/maven-importer-app 9/server/routes/enrich.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/routes/enrich.js\necho \"✅ Copied enrich.js from version 9\"\n)"
+    ],
+    "additionalDirectories": [
+      "/Users/curtismccaw/Downloads/maven-importer-app 9/server/routes"
     ]
   }
 }
