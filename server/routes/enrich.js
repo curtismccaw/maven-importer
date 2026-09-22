@@ -42,12 +42,32 @@ Respond with ONLY raw JSON, no markdown or code fences, in this exact shape:
   "flag_reason": "string or null"
 }`;
 
+    // Scale the token budget with variant count: one alt-text string per
+    // variant, plus SEO copy, description and FAQs, adds up fast on
+    // products with many variants (e.g. Muuto's 24-variant tables) and the
+    // default 1000-token budget silently truncates mid-JSON on those,
+    // producing exactly the generic "invalid JSON" failure this used to
+    // swallow without explanation.
+    const maxTokens = Math.min(4096, 700 + product.variants.length * 60);
+
     let result;
     try {
-      const text = await askClaude(prompt);
-      result = parseJsonResponse(text);
-    } catch (e) {
-      result = { flagged: true, flag_reason: "Enrichment call failed or returned invalid JSON, review manually." };
+      const text = await askClaude(prompt, { maxTokens });
+      try {
+        result = parseJsonResponse(text);
+      } catch (parseErr) {
+        // A truncated response has a very recognisable signature: it stops
+        // mid-string/mid-object rather than being simply malformed.
+        const looksTruncated = /unexpected end of|unterminated string/i.test(parseErr.message);
+        result = {
+          flagged: true,
+          flag_reason: looksTruncated
+            ? `Response was cut off before it finished (used ${maxTokens} max tokens for ${product.variants.length} variants). If this keeps happening on large-variant products, the token budget may need raising further.`
+            : `Model returned invalid JSON: ${parseErr.message.slice(0, 200)}`,
+        };
+      }
+    } catch (apiErr) {
+      result = { flagged: true, flag_reason: `Enrichment call failed: ${apiErr.message.slice(0, 300)}` };
     }
 
     session.enrichment[idx] = result;
