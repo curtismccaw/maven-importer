@@ -1,5 +1,11 @@
-require("dotenv").config();
 const path = require("path");
+// Resolve .env relative to this file's location, not the process's current
+// working directory. Without this, starting the server from anywhere other
+// than the project root (a process manager, a different cwd, a Docker
+// WORKDIR, a systemd unit) silently finds no .env at all — every variable
+// comes back undefined, producing a "must be set" error even when .env is
+// correctly filled out sitting right there in the project folder.
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const express = require("express");
 const cors = require("cors");
 

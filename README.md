@@ -36,11 +36,33 @@ frontend, served as a single deployable process.
 
 ```bash
 cp .env.example .env
-# fill in ANTHROPIC_API_KEY, SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN
+# fill in ANTHROPIC_API_KEY and the Shopify credentials — see the note below
 npm install
 npm run build        # builds the frontend into frontend/dist
 npm start            # serves API + frontend on http://localhost:3000
 ```
+
+### A note on Shopify authentication
+
+Shopify deprecated static `shpat_` tokens for custom apps as of January 1. If your
+app was created in the current Dev Dashboard (dev.shopify.com), there is no static
+token to copy anywhere in the UI anymore — only a **Client ID** and **Client Secret**
+(the secret is in `shpss_` format). Set those as `SHOPIFY_API_KEY` and
+`SHOPIFY_API_SECRET` in `.env`; the app exchanges them for a short-lived access token
+automatically (`server/lib/shopify.js`) and refreshes it before it expires, roughly
+every 24 hours. This is the path almost everyone needs now.
+
+`SHOPIFY_ACCESS_TOKEN` still works as a direct override **only** if you have an older,
+admin-created custom app from before the January 1 change, those keep working with
+their existing static token. Leave it unset otherwise, if it's set alongside
+`SHOPIFY_API_KEY`/`SHOPIFY_API_SECRET`, it takes priority.
+
+If the token exchange fails with `shop_not_permitted`, the app and the store are in
+different Shopify organizations (e.g. an agency's app against a client's store), the
+Client Credentials Grant this app uses only works within one organization. That needs
+Token Exchange or the Authorization Code Grant instead, which require a real OAuth
+install flow with a redirect URI, a bigger addition than this app currently has, flag
+it if you hit this rather than trying to work around it.
 
 For local development with hot reload on the frontend:
 
