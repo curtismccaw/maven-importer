@@ -213,13 +213,13 @@ async function createDraftProduct(product) {
       for (const img of v.local_images) {
         try {
           const resourceUrl = await stageAndUploadImage(img.buffer, img.mimeType, `${v.sku || "image"}.jpg`);
-          mediaInputs.push({ originalSource: resourceUrl, mediaContentType: "IMAGE" });
+          mediaInputs.push({ originalSource: resourceUrl, mediaContentType: "IMAGE", alt: v.alt_text || undefined });
         } catch (e) {
           warnings.push(`Image upload failed for SKU ${v.sku}: ${e.message}`);
         }
       }
     } else if (v.image_url) {
-      mediaInputs.push({ originalSource: v.image_url, mediaContentType: "IMAGE" });
+      mediaInputs.push({ originalSource: v.image_url, mediaContentType: "IMAGE", alt: v.alt_text || undefined });
     }
   }
   if (!mediaInputs.length) {

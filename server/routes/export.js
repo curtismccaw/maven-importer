@@ -79,8 +79,7 @@ router.get("/export/csv/:sessionId", (req, res) => {
           row["Image Src"] = cellImage;
           row["Image Position"] = "1";
           row["Variant Image"] = cellImage;
-          const altText = enr && !enr.flagged && enr.alt_texts && enr.alt_texts[i];
-          if (altText) row["Image Alt Text"] = altText;
+          if (v.alt_text) row["Image Alt Text"] = v.alt_text;
         }
         rows.push(row);
       });

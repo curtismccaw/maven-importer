@@ -2,6 +2,7 @@ const express = require("express");
 const { requireSession } = require("../lib/sessions");
 const { simplifyColors } = require("../lib/colorSimplify");
 const { toClientProduct } = require("../lib/clientShape");
+const { templatedAltText } = require("../lib/altText");
 
 const router = express.Router();
 
@@ -44,6 +45,9 @@ router.post("/colors/simplify/:sessionId", async (req, res) => {
         if (!raw) return;
         const canonical = mapping[raw];
         v.simplified_color = canonical || null;
+        // Recompute now that a cleaner colour label is available, e.g.
+        // "Product – Midnight Blue ***" becomes "Product – Blue".
+        v.alt_text = templatedAltText(p, v);
         if (canonical) {
           colorTags.add(canonical);
           appliedTo += 1;
