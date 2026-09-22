@@ -11,7 +11,12 @@
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 4/server/lib/clientShape.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 4/server/lib/colorSimplify.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
       "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 4/server/routes/colors.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/routes/)",
-      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 4/README.md\" /Users/curtismccaw/Work/Sites/maven-importer/README.md)"
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 4/README.md\" /Users/curtismccaw/Work/Sites/maven-importer/README.md)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 5/server/lib/anthropic.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 5/server/lib/shopify.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/lib/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 5/frontend/src/steps/PushStep.jsx\" /Users/curtismccaw/Work/Sites/maven-importer/frontend/src/steps/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 5/frontend/src/steps/PreviewStep.jsx\" /Users/curtismccaw/Work/Sites/maven-importer/frontend/src/steps/)",
+      "Bash(cp \"/Users/curtismccaw/Downloads/maven-importer-app 5/server/routes/export.js\" /Users/curtismccaw/Work/Sites/maven-importer/server/routes/)"
     ]
   }
 }

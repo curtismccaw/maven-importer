@@ -3,10 +3,10 @@ import { enrichProduct, simplifyColors } from "../api";
 
 export default function PreviewStep({ sessionId, products, setProducts, hasPdf, enrichment, setEnrichment, onBack, onContinue }) {
   const [enriching, setEnriching] = useState(false);
+  const [status, setStatus] = useState({}); // idx -> "pending" | "done" | "failed"
   const [simplifying, setSimplifying] = useState(false);
   const [colorNote, setColorNote] = useState("");
   const [colorError, setColorError] = useState("");
-  const [status, setStatus] = useState({}); // idx -> "pending" | "done" | "failed"
 
   const enrichAll = async () => {
     setEnriching(true);
@@ -60,7 +60,7 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
         <p className="note" style={{ margin: 0 }}>
           {products.length} products, {totalVariants} variants total. These will be created as drafts, nothing goes live automatically.
         </p>
-        <button className="btn btn-dark" onClick={enrichAll} disabled={enriching} style={{ marginLeft: 8 }}>
+        <button className="btn btn-dark spacer" onClick={enrichAll} disabled={enriching}>
           {enriching ? "Enriching..." : "Enrich content with AI"}
         </button>
         <button className="btn btn-dark" onClick={runSimplifyColors} disabled={simplifying} style={{ marginLeft: 8 }}>
@@ -88,8 +88,8 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
               <th>Variants</th>
               <th>Price range</th>
               <th>Images</th>
-              <th>Content</th>
               <th>Colours</th>
+              <th>Content</th>
               <th>Flags</th>
             </tr>
           </thead>
@@ -111,17 +111,17 @@ export default function PreviewStep({ sessionId, products, setProducts, hasPdf, 
                   <td className={withImage < p.variants.length || anyFuzzy ? "amber" : "muted"}>
                     {withImage}/{p.variants.length} matched{anyFuzzy && withImage === p.variants.length ? " (fuzzy)" : ""}
                   </td>
-                  <td>
-                    {!est && <span className="muted">not enriched</span>}
-                    {est === "pending" && <span className="amber">enriching...</span>}
-                    {est === "done" && <span className="green">ready</span>}
-                    {est === "failed" && <span className="red" title={enr && enr.flag_reason}>flagged</span>}
-                  </td>
                   <td className="muted">
                     {(() => {
                       const simplified = Array.from(new Set(p.variants.map((v) => v.simplified_color).filter(Boolean)));
                       return simplified.length ? simplified.join(", ") : "not simplified";
                     })()}
+                  </td>
+                  <td>
+                    {!est && <span className="muted">not enriched</span>}
+                    {est === "pending" && <span className="amber">enriching...</span>}
+                    {est === "done" && <span className="green">ready</span>}
+                    {est === "failed" && <span className="red" title={enr && enr.flag_reason}>flagged</span>}
                   </td>
                   <td className="muted">{(p.flags || []).join("; ")}</td>
                 </tr>

@@ -13,9 +13,9 @@ app.use("/api", require("./routes/pdf"));
 app.use("/api", require("./routes/mapping"));
 app.use("/api", require("./routes/products"));
 app.use("/api", require("./routes/enrich"));
+app.use("/api", require("./routes/colors"));
 app.use("/api", require("./routes/push"));
 app.use("/api", require("./routes/export"));
-app.use("/api", require("./routes/colors"));
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

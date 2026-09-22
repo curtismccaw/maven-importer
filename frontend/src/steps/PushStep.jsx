@@ -7,6 +7,7 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
   const [attempted, setAttempted] = useState(false);
 
   const doPush = async (idx) => {
+    setAttempted(true);
     setPushStatus((s) => ({ ...s, [idx]: { status: "pushing", message: "" } }));
     try {
       const result = await pushProduct(sessionId, idx);
@@ -46,7 +47,7 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
   return (
     <div className="card">
       <div className="actions" style={{ marginTop: 0, marginBottom: 16 }}>
-        <p className="note" style={{ margin: 0 }}>Pushes 2 at a time to the Shopify Admin API. You can retry any that fail.</p>
+        <p className="note" style={{ margin: 0 }}>Pushes 2 at a time to the Shopify Admin API, or push one product on its own with the button on its row. You can retry any that fail.</p>
         <div style={{ display: "flex", gap: 8 }} className="spacer">
           <a className="btn" href={exportCsvUrl(sessionId)}>Download CSV</a>
           <button className="btn btn-primary" onClick={pushAll} disabled={pushing}>
@@ -66,8 +67,10 @@ export default function PushStep({ sessionId, brand, products, enrichment, onBac
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className={`badge badge-${st ? st.status : "waiting"}`}>{st ? st.status : "waiting"}</span>
-                {st && st.status === "failed" && (
-                  <button className="retry-link" onClick={() => doPush(i)}>retry</button>
+                {(!st || st.status === "failed") && (
+                  <button className="retry-link" onClick={() => doPush(i)} disabled={pushing}>
+                    {st && st.status === "failed" ? "retry" : "push"}
+                  </button>
                 )}
               </div>
             </div>

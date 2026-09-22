@@ -14,11 +14,14 @@
 //   Remote CDN URLs (e.g. Muuto's occtoo-media.com) skip staging entirely.
 
 function shopifyConfig() {
-  const domain = process.env.SHOPIFY_STORE_DOMAIN;
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+  const domain = (process.env.SHOPIFY_STORE_DOMAIN || "").trim();
+  const token = (process.env.SHOPIFY_ACCESS_TOKEN || "").trim();
   const apiVersion = process.env.SHOPIFY_API_VERSION || "2024-10";
   if (!domain || !token) {
-    throw new Error("SHOPIFY_STORE_DOMAIN and SHOPIFY_ACCESS_TOKEN must be set on the server (.env).");
+    throw new Error("SHOPIFY_STORE_DOMAIN and SHOPIFY_ACCESS_TOKEN must be set on the server (.env), then restart the server (env changes are only read at startup).");
+  }
+  if (token === "shpat_...") {
+    throw new Error("SHOPIFY_ACCESS_TOKEN in .env is still the placeholder value from .env.example. Replace it with a real access token from your Shopify app, then restart the server.");
   }
   return { domain, token, apiVersion };
 }
@@ -35,7 +38,14 @@ async function shopifyGraphQL(query, variables) {
   });
   const data = await res.json();
   if (data.errors) {
-    throw new Error(`Shopify GraphQL error: ${JSON.stringify(data.errors)}`);
+    const errText = typeof data.errors === "string" ? data.errors : JSON.stringify(data.errors);
+    if (/invalid api key or access token/i.test(errText) || res.status === 401) {
+      const masked = token.length > 10 ? `${token.slice(0, 8)}...${token.slice(-4)}` : "(very short — likely not a real token)";
+      throw new Error(
+        `Shopify rejected this access token as invalid (loaded token: ${masked}, store: ${domain}). Check that: (1) SHOPIFY_STORE_DOMAIN is the exact *.myshopify.com domain (not a custom domain), (2) the token is current and hasn't been regenerated/revoked in the app, (3) the token actually belongs to this store, not a different one, (4) the server was restarted after the .env edit.`
+      );
+    }
+    throw new Error(`Shopify GraphQL error: ${errText}`);
   }
   return data.data;
 }

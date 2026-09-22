@@ -53,6 +53,11 @@ router.get("/export/csv/:sessionId", (req, res) => {
             row["SEO Title"] = enr.seo_title || "";
             row["SEO Description"] = enr.seo_description || "";
           }
+          // Shopify's standard colour metafield is product-level (it can hold
+          // more than one colour for the product as a whole), so it's set
+          // once on the first row rather than repeated per variant.
+          const uniqueColors = Array.from(new Set(p.variants.map((v) => v.simplified_color).filter(Boolean)));
+          if (uniqueColors.length) row["Color (product.metafields.shopify.color-pattern)"] = uniqueColors.join(", ");
         }
         row["Option1 Name"] = usesOptions ? v.option1_name || "Title" : "";
         row["Option1 Value"] = usesOptions ? v.option1_value || "Default Title" : "";
@@ -76,13 +81,6 @@ router.get("/export/csv/:sessionId", (req, res) => {
           row["Variant Image"] = cellImage;
           const altText = enr && !enr.flagged && enr.alt_texts && enr.alt_texts[i];
           if (altText) row["Image Alt Text"] = altText;
-        }
-        if (i === 0) {
-          // Shopify's standard colour metafield is product-level (it can hold
-          // more than one colour for the product as a whole), so it's set
-          // once on the first row rather than repeated per variant.
-          const uniqueColors = Array.from(new Set(p.variants.map((v) => v.simplified_color).filter(Boolean)));
-          if (uniqueColors.length) row["Color (product.metafields.shopify.color-pattern)"] = uniqueColors.join(", ");
         }
         rows.push(row);
       });
